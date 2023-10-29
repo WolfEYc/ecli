@@ -6,7 +6,7 @@ use skim::SkimItem;
 use std::{
     borrow::Cow,
     collections::BTreeMap,
-    fs::{File, OpenOptions},
+    fs::{self, OpenOptions},
     io::{self, Write},
     path::PathBuf,
     process::Command,
@@ -65,33 +65,31 @@ impl<'de> Deserialize<'de> for Cmd {
     }
 }
 
-fn deserialize(file: File) -> Vec<CommandLookup> {
-    let mut rdr = csv::Reader::from_reader(file);
-    rdr.deserialize()
-        .map(|r| CommandLookup::from(r.unwrap()))
-        .collect()
+fn deserialize(file: String) -> Vec<CommandLookup> {
+    toml::from_str(file.as_str()).unwrap()
 }
 
 pub fn get_commands_filepath() -> PathBuf {
     let proj_dirs = ProjectDirs::from("com", "wolfey", "fsf").unwrap();
     let local_data = proj_dirs.data_local_dir();
-    let cmds_filepath = local_data.join("ecli_cmds.csv");
+    let cmds_filepath = local_data.join("ecli_cmds.toml");
     cmds_filepath
 }
 
 pub fn get_commands_from_local_data() -> Vec<CommandLookup> {
     let cmds_path = get_commands_filepath();
-    let Ok(file) = File::open(cmds_path) else {
-        download_from_url("https://github.com/WolfEYc/fsf/blob/master/cmd/default.csv");
+    let Ok(toml_content) = fs::read_to_string(cmds_path) else {
+        download_from_url("https://github.com/WolfEYc/fsf/blob/master/cmd/default.toml");
         return get_commands_from_local_data();
     };
-    deserialize(file)
+    deserialize(toml_content)
 }
 
-pub fn write_commands_to_local_data(cmds_csv: &[u8]) {
+pub fn write_commands_to_local_data(cmds_toml: &[u8]) {
     let cmds_path = get_commands_filepath();
     let mut file = OpenOptions::new().append(true).open(cmds_path).unwrap();
-    file.write_all(cmds_csv).unwrap();
+    file.write_all(b"\n").unwrap();
+    file.write_all(cmds_toml).unwrap();
 }
 
 pub fn execute_shell_command(command: &str) {

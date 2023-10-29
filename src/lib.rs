@@ -20,7 +20,7 @@ pub fn download_from_url(url: &str) {
     write_commands_to_local_data(res.bytes().unwrap().as_ref())
 }
 
-pub fn open_cmds_csv_in_fav_text_editor() {
+pub fn open_cmds_toml_in_fav_text_editor() {
     let cmds_filepath = get_commands_filepath();
     open::that(cmds_filepath).unwrap();
 }

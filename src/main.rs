@@ -10,7 +10,7 @@ pub fn main() {
     };
 
     match cmd {
-        cli::Commands::Edit => open_cmds_csv_in_fav_text_editor(),
-        cli::Commands::Download { url } => download_from_url(url),
+        cli::Commands::Edit => open_cmds_toml_in_fav_text_editor(),
+        cli::Commands::Download { url } => download_from_url(url.as_str()),
     }
 }

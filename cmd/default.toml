@@ -1,0 +1,3 @@
+[[commands]]
+keyword = "joe mama"
+command = 'echo "{output}"'
