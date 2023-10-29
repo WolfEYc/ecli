@@ -82,7 +82,8 @@ pub fn get_commands_filepath() -> PathBuf {
 pub fn get_commands_from_local_data() -> Vec<CommandLookup> {
     let cmds_path = get_commands_filepath();
     let Ok(file) = File::open(cmds_path) else {
-        download_from_url("")
+        download_from_url("https://github.com/WolfEYc/fsf/blob/master/cmd/default.csv");
+        return get_commands_from_local_data();
     };
     deserialize(file)
 }

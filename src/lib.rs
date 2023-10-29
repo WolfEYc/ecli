@@ -15,9 +15,8 @@ pub fn find_n_execute() {
     execute_shell_command(&rendered_cmd)
 }
 
-pub fn download_from_url(url: String) {
+pub fn download_from_url(url: &str) {
     let res = reqwest::blocking::get(url).unwrap();
-
     write_commands_to_local_data(res.bytes().unwrap().as_ref())
 }
 
