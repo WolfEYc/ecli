@@ -11,4 +11,5 @@ pub struct Args {
 pub enum Commands {
     Edit,
     Download { url: String },
+    Update {},
 }

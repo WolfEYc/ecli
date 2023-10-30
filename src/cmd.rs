@@ -106,7 +106,7 @@ pub fn write_commands_to_local_data(cmds_toml: &[u8]) {
 
 pub fn execute_shell_command(command: &str) {
     println!("{command}");
-    Command::new(command).spawn().unwrap();
+    Command::new(command).spawn().unwrap().wait().unwrap();
 }
 
 pub fn input_prompt(prompt: String) -> String {
