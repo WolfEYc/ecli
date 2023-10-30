@@ -1,26 +1,30 @@
 use directories::ProjectDirs;
-use handlebars::Handlebars;
 use regex::Regex;
 use serde::Deserialize;
 use skim::SkimItem;
 use std::{
     borrow::Cow,
-    collections::BTreeMap,
     fs::{self, OpenOptions},
     io::{self, Write},
     path::PathBuf,
     process::Command,
 };
+use tera::{Context, Tera};
 
 use crate::download_from_url;
 
-#[derive(Deserialize, Clone)]
+#[derive(Debug, Deserialize)]
+pub struct LookupVec {
+    pub commands: Vec<CommandLookup>,
+}
+
+#[derive(Deserialize, Clone, Debug)]
 pub struct CommandLookup {
     pub keyword: String,
     pub command: Cmd,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Cmd {
     command: String,
     params: Vec<String>,
@@ -28,14 +32,14 @@ pub struct Cmd {
 
 impl Cmd {
     pub fn render_command(&self) -> String {
-        let mut handlebars = Handlebars::new();
-        handlebars.register_escape_fn(handlebars::no_escape);
-        let mut context = BTreeMap::new();
+        let mut tera = Tera::default();
+
+        let mut context = Context::new();
         for param in self.params.iter() {
-            context.insert(param, input_prompt(format!("{param}:")));
+            context.insert(param, &input_prompt(format!("{param}:")));
         }
 
-        handlebars.render_template(&self.command, &context).unwrap()
+        tera.render_str(&self.command, &context).unwrap()
     }
 }
 
@@ -65,21 +69,21 @@ impl<'de> Deserialize<'de> for Cmd {
     }
 }
 
-fn deserialize(file: String) -> Vec<CommandLookup> {
+fn deserialize(file: String) -> LookupVec {
     toml::from_str(file.as_str()).unwrap()
 }
 
 pub fn get_commands_filepath() -> PathBuf {
     let proj_dirs = ProjectDirs::from("com", "wolfey", "fsf").unwrap();
     let local_data = proj_dirs.data_local_dir();
-    let cmds_filepath = local_data.join("ecli_cmds.toml");
+    let cmds_filepath = local_data.join("default.toml");
     cmds_filepath
 }
 
-pub fn get_commands_from_local_data() -> Vec<CommandLookup> {
+pub fn get_commands_from_local_data() -> LookupVec {
     let cmds_path = get_commands_filepath();
     let Ok(toml_content) = fs::read_to_string(cmds_path) else {
-        download_from_url("https://github.com/WolfEYc/fsf/blob/master/cmd/default.toml");
+        download_from_url("https://raw.githubusercontent.com/WolfEYc/fsf/master/cmd/default.toml");
         return get_commands_from_local_data();
     };
     deserialize(toml_content)
@@ -87,12 +91,21 @@ pub fn get_commands_from_local_data() -> Vec<CommandLookup> {
 
 pub fn write_commands_to_local_data(cmds_toml: &[u8]) {
     let cmds_path = get_commands_filepath();
-    let mut file = OpenOptions::new().append(true).open(cmds_path).unwrap();
+    println!("{:?}", cmds_path);
+    if let Some(parent) = cmds_path.parent() {
+        fs::create_dir_all(parent).unwrap();
+    }
+    let mut file = OpenOptions::new()
+        .append(true)
+        .create(true)
+        .open(cmds_path)
+        .unwrap();
     file.write_all(b"\n").unwrap();
     file.write_all(cmds_toml).unwrap();
 }
 
 pub fn execute_shell_command(command: &str) {
+    println!("{command}");
     Command::new(command).spawn().unwrap();
 }
 

@@ -1,8 +1,8 @@
 extern crate skim;
-use crate::cmd::CommandLookup;
+use crate::cmd::{CommandLookup, LookupVec};
 use skim::prelude::*;
 
-pub fn lookup(cmds: Vec<CommandLookup>) -> CommandLookup {
+pub fn lookup(cmds: LookupVec) -> CommandLookup {
     let options = SkimOptionsBuilder::default()
         .height(Some("50%"))
         .multi(true)
@@ -10,9 +10,12 @@ pub fn lookup(cmds: Vec<CommandLookup>) -> CommandLookup {
         .unwrap();
 
     let (tx_item, rx_item): (SkimItemSender, SkimItemReceiver) = unbounded();
-    for cmd in cmds {
+
+    for cmd in cmds.commands {
         tx_item.send(Arc::new(cmd)).unwrap();
     }
+
+    drop(tx_item);
 
     // `run_with` would read and show items from the stream
     let skim_output = Skim::run_with(&options, Some(rx_item)).unwrap();
