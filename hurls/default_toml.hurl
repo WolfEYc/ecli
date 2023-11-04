@@ -1,0 +1,1 @@
+GET https://raw.githubusercontent.com/WolfEYc/fsf/master/cmd/default.toml

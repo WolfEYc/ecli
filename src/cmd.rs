@@ -1,17 +1,14 @@
-use directories::ProjectDirs;
 use regex::Regex;
 use serde::Deserialize;
 use skim::SkimItem;
 use std::{
     borrow::Cow,
-    fs::{self, OpenOptions},
-    io::{self, Write},
+    fs,
+    io::{self},
     path::PathBuf,
     process::Command,
 };
 use tera::{Context, Tera};
-
-use crate::download_from_url;
 
 #[derive(Debug, Deserialize)]
 pub struct LookupVec {
@@ -31,17 +28,23 @@ pub struct Cmd {
 }
 
 impl Cmd {
-    pub fn render_command(&self) -> String {
+    pub fn render(&self) -> String {
         let mut tera = Tera::default();
         println!("Rendering command: {}", self.command);
         println!("Reading params: {:?}", self.params);
         let mut context = Context::new();
         for param in self.params.iter() {
             println!("bruh");
+
             context.insert(param, &input_prompt(format!("{param}:")));
         }
 
         tera.render_str(&self.command, &context).unwrap()
+    }
+
+    pub fn execute(&self) {
+        let command = self.render();
+        Command::new("sh").arg("-c").arg(command).spawn().unwrap();
     }
 }
 
@@ -72,53 +75,30 @@ impl<'de> Deserialize<'de> for Cmd {
     }
 }
 
-fn deserialize(file: String) -> LookupVec {
-    toml::from_str(file.as_str()).unwrap()
-}
+impl TryFrom<String> for LookupVec {
+    type Error = toml::de::Error;
 
-pub fn get_commands_filepath() -> PathBuf {
-    let proj_dirs = ProjectDirs::from("com", "wolfey", "fsf").unwrap();
-    let local_data = proj_dirs.data_local_dir();
-    let cmds_filepath = local_data.join("default.toml");
-    cmds_filepath
-}
-
-pub fn get_commands_from_local_data() -> LookupVec {
-    let cmds_path = get_commands_filepath();
-    let Ok(toml_content) = fs::read_to_string(cmds_path) else {
-        download_from_url("https://raw.githubusercontent.com/WolfEYc/fsf/master/cmd/default.toml");
-        return get_commands_from_local_data();
-    };
-    deserialize(toml_content)
-}
-
-pub fn write_commands_to_local_data(cmds_toml: &[u8]) {
-    let cmds_path = get_commands_filepath();
-    println!("{:?}", cmds_path);
-    if let Some(parent) = cmds_path.parent() {
-        fs::create_dir_all(parent).unwrap();
+    fn try_from(file: String) -> Result<Self, Self::Error> {
+        toml::from_str(file.as_str())
     }
-    let mut file = OpenOptions::new()
-        .append(true)
-        .create(true)
-        .open(cmds_path)
-        .unwrap();
-    file.write_all(b"\n").unwrap();
-    file.write_all(cmds_toml).unwrap();
 }
 
-pub fn execute_shell_command(command: &str) {
-    println!("Executing CMD: {}", command);
-    Command::new("sh").arg("-c").arg(command).spawn().unwrap();
+impl TryFrom<PathBuf> for LookupVec {
+    type Error = color_eyre::Report;
+
+    fn try_from(value: PathBuf) -> Result<Self, Self::Error> {
+        let file_str = fs::read_to_string(value)?;
+        Ok(toml::from_str(&file_str)?)
+    }
 }
 
-pub fn read_line() -> String {
+fn read_line() -> String {
     let mut str = String::new();
     io::stdin().read_line(&mut str).expect("!");
     str
 }
 
-pub fn input_prompt(prompt: String) -> String {
+fn input_prompt(prompt: String) -> String {
     println!("{}", prompt);
     read_line()
 }
