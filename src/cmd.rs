@@ -105,19 +105,18 @@ pub fn write_commands_to_local_data(cmds_toml: &[u8]) {
 }
 
 pub fn execute_shell_command(command: &str) {
-    println!("{command}");
+    println!("{}", command);
     Command::new(command).spawn().unwrap().wait().unwrap();
+}
+
+pub fn read_line() -> String {
+    let mut str = String::new();
+    io::stdout().flush().unwrap();
+    io::stdin().read_line(&mut str).expect("!");
+    str
 }
 
 pub fn input_prompt(prompt: String) -> String {
     println!("{}", prompt);
-    input()
-}
-
-pub fn input() -> String {
-    let mut input = String::new();
-    io::stdin()
-        .read_line(&mut input)
-        .expect("Failed to read line");
-    input.trim().to_string()
+    read_line()
 }

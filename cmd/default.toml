@@ -1,6 +1,6 @@
 [[commands]]
 keyword = "joe mama"
-command = 'echo "{{ output }}"'
+command = 'echo {{ output }}'
 
 [[commands]]
 keyword = "joe daddy"
