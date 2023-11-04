@@ -6,7 +6,7 @@ description = "The Fast Shell Finder, find and execute simple to complex command
 readme = "README.md"
 repository = "https://github.com/WolfEYc/fsf"
 license = "MIT"
-keywords = ["posix", "unix", "shell", "fzf", "fuzzy finder"]
+keywords = ["posix", "unix", "shell", "fzf", "fuzzy"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
