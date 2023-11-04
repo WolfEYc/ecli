@@ -1,4 +1,6 @@
 extern crate skim;
+use std::io::{self, Write};
+
 use crate::cmd::{CommandLookup, LookupVec};
 use skim::prelude::*;
 
@@ -19,6 +21,8 @@ pub fn lookup(cmds: LookupVec) -> CommandLookup {
 
     // `run_with` would read and show items from the stream
     let skim_output = Skim::run_with(&options, Some(rx_item)).unwrap();
+
+    io::stdout().flush().unwrap();
 
     skim_output
         .selected_items
