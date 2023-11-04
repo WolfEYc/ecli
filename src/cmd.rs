@@ -33,9 +33,11 @@ pub struct Cmd {
 impl Cmd {
     pub fn render_command(&self) -> String {
         let mut tera = Tera::default();
-
+        println!("Rendering command: {}", self.command);
+        println!("Reading params: {:?}", self.params);
         let mut context = Context::new();
         for param in self.params.iter() {
+            println!("bruh");
             context.insert(param, &input_prompt(format!("{param}:")));
         }
 
@@ -51,11 +53,12 @@ impl SkimItem for CommandLookup {
 
 impl From<String> for Cmd {
     fn from(command: String) -> Self {
-        let re = Regex::new(r"\{(\w+)\}").unwrap();
+        let re = Regex::new(r"\{\{(\s*\w+\s*)\}\}").unwrap();
         let params = re
             .captures_iter(&command)
-            .map(|capture| capture[1].to_string())
+            .map(|capture| capture[1].trim().to_string())
             .collect();
+
         Cmd { command, params }
     }
 }
@@ -105,13 +108,12 @@ pub fn write_commands_to_local_data(cmds_toml: &[u8]) {
 }
 
 pub fn execute_shell_command(command: &str) {
-    println!("{}", command);
-    Command::new(command).spawn().unwrap().wait().unwrap();
+    println!("Executing CMD: {}", command);
+    Command::new("sh").arg("-c").arg(command).spawn().unwrap();
 }
 
 pub fn read_line() -> String {
     let mut str = String::new();
-    io::stdout().flush().unwrap();
     io::stdin().read_line(&mut str).expect("!");
     str
 }
