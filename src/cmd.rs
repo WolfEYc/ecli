@@ -1,5 +1,6 @@
+use color_eyre::Result;
 use regex::Regex;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use skim::SkimItem;
 use std::{
     borrow::Cow,
@@ -10,12 +11,12 @@ use std::{
 };
 use tera::{Context, Tera};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct LookupVec {
     pub commands: Vec<CommandLookup>,
 }
 
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CommandLookup {
     pub keyword: String,
     pub command: Cmd,
@@ -66,6 +67,21 @@ impl From<String> for Cmd {
     }
 }
 
+impl From<Cmd> for String {
+    fn from(command: Cmd) -> Self {
+        command.command
+    }
+}
+
+impl Serialize for Cmd {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_bytes(String::from(self.to_owned()).as_bytes())
+    }
+}
+
 impl<'de> Deserialize<'de> for Cmd {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -89,6 +105,23 @@ impl TryFrom<PathBuf> for LookupVec {
     fn try_from(value: PathBuf) -> Result<Self, Self::Error> {
         let file_str = fs::read_to_string(value)?;
         Ok(toml::from_str(&file_str)?)
+    }
+}
+
+impl LookupVec {
+    pub fn new() -> Self {
+        LookupVec {
+            commands: Vec::new(),
+        }
+    }
+    pub fn save(self, filepath: &PathBuf) -> Result<Self> {
+        let toml_str = toml::to_string_pretty(&self)?;
+        fs::write(filepath, toml_str.as_bytes())?;
+        Ok(self)
+    }
+    pub fn merge(&mut self, mut other: LookupVec) -> &Self {
+        self.commands.append(&mut other.commands);
+        self
     }
 }
 
