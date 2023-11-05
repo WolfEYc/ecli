@@ -4,12 +4,12 @@ use serde::{Deserialize, Serialize};
 use skim::SkimItem;
 use std::{
     borrow::Cow,
-    fs,
     io::{self},
     path::PathBuf,
-    process::Command,
+    process::{Child, Command},
 };
 use tera::{Context, Tera};
+use tokio::fs;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LookupVec {
@@ -43,9 +43,9 @@ impl Cmd {
         tera.render_str(&self.command, &context).unwrap()
     }
 
-    pub fn execute(&self) {
+    pub fn execute(&self) -> Result<Child> {
         let command = self.render();
-        Command::new("sh").arg("-c").arg(command).spawn().unwrap();
+        Ok(Command::new("sh").arg("-c").arg(command).spawn()?)
     }
 }
 
@@ -78,7 +78,7 @@ impl Serialize for Cmd {
     where
         S: serde::Serializer,
     {
-        serializer.serialize_bytes(String::from(self.to_owned()).as_bytes())
+        serializer.serialize_str(&String::from(self.to_owned()))
     }
 }
 
@@ -91,32 +91,19 @@ impl<'de> Deserialize<'de> for Cmd {
     }
 }
 
-impl TryFrom<String> for LookupVec {
-    type Error = toml::de::Error;
-
-    fn try_from(file: String) -> Result<Self, Self::Error> {
-        toml::from_str(file.as_str())
-    }
-}
-
-impl TryFrom<PathBuf> for LookupVec {
-    type Error = color_eyre::Report;
-
-    fn try_from(value: PathBuf) -> Result<Self, Self::Error> {
-        let file_str = fs::read_to_string(value)?;
-        Ok(toml::from_str(&file_str)?)
-    }
-}
-
 impl LookupVec {
     pub fn new() -> Self {
         LookupVec {
             commands: Vec::new(),
         }
     }
-    pub fn save(self, filepath: &PathBuf) -> Result<Self> {
-        let toml_str = toml::to_string_pretty(&self)?;
-        fs::write(filepath, toml_str.as_bytes())?;
+    pub async fn load(filepath: PathBuf) -> Result<Self> {
+        let file_str = fs::read_to_string(filepath).await?;
+        Ok(toml::from_str(&file_str)?)
+    }
+    pub async fn save(&self, filepath: &PathBuf) -> Result<&Self> {
+        let toml_str = toml::to_string_pretty(self)?;
+        fs::write(filepath, toml_str.as_bytes()).await?;
         Ok(self)
     }
     pub fn merge(&mut self, mut other: LookupVec) -> &Self {

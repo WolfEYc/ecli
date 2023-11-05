@@ -1,103 +1,152 @@
-use color_eyre::Result;
+use crate::cmd::LookupVec;
+use color_eyre::{eyre::ErrReport, Result};
 use directories::ProjectDirs;
+use prettytable::{row, table};
 use serde::{Deserialize, Serialize};
 use std::{
     fs::{self},
     path::PathBuf,
 };
+use tokio::task::JoinSet;
 use url::Url;
 
-use crate::cmd::LookupVec;
+static DEFAULT_SOURCE: &str =
+    "https://raw.githubusercontent.com/WolfEYc/fsf/master/cmd/default.toml";
 
-#[derive(Serialize, Deserialize)]
-struct Config {
-    sources: Vec<String>,
+#[derive(Serialize, Deserialize, Clone)]
+pub struct Source {
+    pub url: String,
+    pub filepath: PathBuf,
+}
+#[derive(Serialize, Deserialize, Default)]
+pub struct Config {
+    pub sources: Vec<Source>,
+}
+
+impl Source {
+    pub async fn update_commands(self) -> Result<(Self, LookupVec)> {
+        let res = reqwest::get(&self.url).await?;
+        let toml_content: LookupVec = toml::from_str(&res.text().await?)?;
+        toml_content.save(&self.filepath).await?;
+        Ok((self, toml_content))
+    }
 }
 
 impl Config {
-    fn save(&self) -> Result<()> {
+    fn new() -> Result<Self> {
+        let mut config = Config::default();
+        config.add_source(DEFAULT_SOURCE)?;
+        Ok(config)
+    }
+
+    pub fn save(&self) -> Result<&Self> {
         let str_toml = toml::to_string_pretty(&self)?;
-        let filepath = get_config_filepath();
-        fs::create_dir_all(&filepath)?;
+        let filepath = Config::get_filepath();
+        println!("writing config to: {}", filepath.to_str().unwrap());
         fs::write(&filepath, str_toml.as_bytes())?;
+        Ok(self)
+    }
+
+    pub fn load() -> Result<Self> {
+        let toml_file = fs::read_to_string(Config::get_filepath());
+        Ok(match toml_file {
+            Ok(toml_str) => toml::from_str(&toml_str)?,
+            Err(_) => Config::new()?,
+        })
+    }
+
+    fn get_filepath() -> PathBuf {
+        let proj_dirs = ProjectDirs::from("com", "wolfey", "fsf").unwrap();
+        let config_dir = proj_dirs.config_local_dir();
+        let config_filepath = config_dir.join("config.toml");
+        fs::create_dir_all(&config_dir).unwrap();
+        config_filepath
+    }
+
+    pub fn add_source(&mut self, url: &str) -> Result<Source> {
+        let url = url.to_string();
+        for source in &self.sources {
+            if source.url == url {
+                return Err(ErrReport::msg(format!("source already added! {}", url)));
+            }
+        }
+
+        let binding = Url::parse(&url)?;
+        let filename = binding.path_segments().unwrap().last().unwrap();
+        let filepath = get_cmds_dir().join(filename);
+
+        let source = Source {
+            url: url.to_string(),
+            filepath,
+        };
+
+        self.sources.push(source.clone());
+
+        Ok(source)
+    }
+
+    pub fn remove_source(&mut self, url: &str) -> Result<Source> {
+        let source_idx = self
+            .sources
+            .iter()
+            .position(|src| src.url == url)
+            .ok_or(ErrReport::msg("Source Not Found"))?;
+        fs::remove_file(self.sources[source_idx].filepath.clone())?;
+        Ok(self.sources.swap_remove(source_idx))
+    }
+
+    pub async fn load_commands(&self) -> Result<LookupVec> {
+        let mut master_table = LookupVec::new();
+        let mut set = JoinSet::new();
+
+        for source in &self.sources {
+            set.spawn(LookupVec::load(source.filepath.clone()));
+        }
+
+        while let Some(lookup_vec) = set.join_next().await {
+            let Ok(Ok(lookup_vec)) = lookup_vec else {
+                println!("failed to load a lookup_table {}", lookup_vec.unwrap_err());
+                continue;
+            };
+            master_table.merge(lookup_vec);
+        }
+
+        Ok(master_table)
+    }
+
+    pub fn print_sources(&self) -> &Self {
+        let mut table = table!(["url", "filepath"]);
+        table.extend(
+            self.sources
+                .iter()
+                .map(|x| row![x.url, x.filepath.to_str().unwrap()]),
+        );
+
+        table.printstd();
+        self
+    }
+
+    pub async fn update_commands(&self) -> Result<()> {
+        let mut set = JoinSet::new();
+        for source in &self.sources {
+            set.spawn(source.clone().update_commands());
+        }
+
+        while let Some(res) = set.join_next().await {
+            let (source, lookup_vec) = res??;
+            println!(
+                "pulled: {} cmds from {}",
+                lookup_vec.commands.len(),
+                source.url
+            )
+        }
         Ok(())
     }
-
-    fn load() -> Result<Config> {
-        let toml_content = fs::read_to_string(get_config_filepath())?;
-        Ok(toml::from_str(&toml_content)?)
-    }
 }
 
-fn get_config_filepath() -> PathBuf {
-    let proj_dirs = ProjectDirs::from("com", "wolfey", "fsf").unwrap();
-    let configfile = proj_dirs.config_local_dir().join("config");
-    fs::create_dir_all(&configfile).unwrap();
-    configfile
-}
-
-fn save_source_url(url: &str) -> Result<()> {
-    let mut config = Config::load()?;
-    config.sources.push(url.to_string());
-    config.save()?;
-    Ok(())
-}
-
-pub fn add_source(url: &str) -> Result<LookupVec> {
-    let lookup_vec = update_from_source(url)?;
-    save_source_url(url)?;
-    Ok(lookup_vec)
-}
-
-pub fn update_from_source(url: &str) -> Result<LookupVec> {
-    let binding = Url::parse(&url)?;
-    let filename = binding.path_segments().unwrap().last().unwrap();
-    let filepath = get_commands_dir().join(filename);
-
-    let res = reqwest::blocking::get(url)?;
-    let toml_contet: LookupVec = res.text()?.try_into()?;
-
-    println!("Downloaded {} commands", toml_contet.commands.len());
-    println!("Saving to local disk ...");
-    let toml_contet = toml_contet.save(&filepath)?;
-    println!("Saved!");
-    Ok(toml_contet)
-}
-
-pub fn get_commands_dir() -> PathBuf {
+fn get_cmds_dir() -> PathBuf {
     let proj_dirs = ProjectDirs::from("com", "wolfey", "fsf").unwrap();
     let cmds_dir = proj_dirs.data_local_dir().join("cmds");
     fs::create_dir_all(&cmds_dir).unwrap();
-    cmds_dir.to_path_buf()
-}
-
-pub fn load_saved_commands() -> LookupVec {
-    let cmds_path = get_commands_dir();
-    let cmd_files = read_files_in_dir(&cmds_path);
-
-    let mut master_table = LookupVec::new();
-
-    if cmd_files.is_empty() {
-        println!("No commands found, downloading defaults...");
-        let defaut_table =
-            add_source("https://raw.githubusercontent.com/WolfEYc/fsf/master/cmd/default.toml")
-                .unwrap();
-
-        master_table.merge(defaut_table);
-    }
-
-    for cmd_filepath in cmd_files {
-        let Ok(lookup_table) = cmd_filepath.try_into() else {
-            continue;
-        };
-
-        master_table.merge(lookup_table);
-    }
-
-    master_table
-}
-
-pub fn read_files_in_dir(dir: &PathBuf) -> Vec<PathBuf> {
-    let entries = fs::read_dir(dir).unwrap();
-    entries.map(|e| e.unwrap().path()).collect()
+    cmds_dir
 }

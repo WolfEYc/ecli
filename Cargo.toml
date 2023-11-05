@@ -16,10 +16,12 @@ color-eyre = "0.6.2"
 colored = "2.0.4"
 directories = "5.0.1"
 open = "5.0.0"
+prettytable-rs = "0.10.0"
 regex = "1.10.2"
 reqwest = { version = "0.11.22", features = ["blocking"] }
 serde = { version = "1.0.190", features = ["derive"] }
 skim = "0.10.4"
 tera = "1.19.1"
+tokio = { version = "1.33.0", features = ["full"] }
 toml = "0.8.6"
 url = "2.4.1"

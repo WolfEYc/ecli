@@ -22,6 +22,7 @@ pub fn lookup(cmds: LookupVec) -> CommandLookup {
 
     clear_stdout();
 
+    // Welcome to rust!
     skim_output
         .selected_items
         .first()

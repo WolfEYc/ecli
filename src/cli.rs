@@ -9,7 +9,8 @@ pub struct Args {
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    Edit,
+    List,
     Add { url: String },
+    Remove { url: String },
     Update {},
 }
